@@ -1,0 +1,29 @@
+body {
+    background-color: #06082D;
+    position: relative;        /* para que o ::before fique posicionado em relação ao body */
+    margin: 0;
+    padding: 0;
+}
+
+body::before {
+    content: "";
+    position: fixed;           /* garante que percorra toda a janela */
+    top: 50%;
+    left: 50%;
+    width: 40vw;               /* ajuste aqui o tamanho relativo se quiser maior/menor */
+    height: 40vh;
+    transform: translate(-50%, -50%);
+    background: url('./INAC.svg') no-repeat center center;
+    background-size: contain;
+    opacity: 0.5;              /* opacidade reduzida */
+    pointer-events: none;      /* não interfere em cliques */
+    z-index: -1;               /* sempre atrás do conteúdo */
+}
+
+.full_page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+}
