@@ -1,67 +1,84 @@
 package inac.fernando.aulas.projetos.authlogin.authserver.runner
 
-import org.springframework.boot.CommandLineRunner
+import inac.fernando.aulas.projetos.authlogin.authserver.domain.entity.Role
+import inac.fernando.aulas.projetos.authlogin.authserver.domain.entity.User
+import inac.fernando.aulas.projetos.authlogin.authserver.domain.entity.UserRole
+import inac.fernando.aulas.projetos.authlogin.authserver.domain.repository.RoleRepository
+import inac.fernando.aulas.projetos.authlogin.authserver.domain.repository.UserRepository
+import inac.fernando.aulas.projetos.authlogin.authserver.domain.repository.UserRoleRepository
+import jakarta.transaction.Transactional
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.ApplicationArguments
+import org.springframework.boot.ApplicationRunner
+import org.springframework.context.annotation.DependsOn
+import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Component
-import org.springframework.security.oauth2.core.AuthorizationGrantType
-import org.springframework.security.oauth2.core.ClientAuthenticationMethod
-import org.springframework.security.oauth2.core.oidc.OidcScopes
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClient
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository
-import org.springframework.security.oauth2.server.authorization.settings.ClientSettings
-import org.springframework.security.oauth2.server.authorization.settings.TokenSettings
-import java.time.Duration
-import java.util.*
 
 @Component
+@DependsOn("flyway")
 class DataInitializer(
-    private val registeredClientRepository: RegisteredClientRepository
-) : CommandLineRunner {
+    private val roleRepo: RoleRepository,
+    private val userRepo: UserRepository,
+    private val userRoleRepo: UserRoleRepository,
+    private val encoder: PasswordEncoder,
 
-    override fun run(vararg args: String?) {
-        // 1) Cliente para React (Auth Code + PKCE)
-        if (registeredClientRepository.findByClientId("react-client") == null) {
-            val reactClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("react-client")
-                // Para um public client você poderia omitir o secret e usar ClientAuthenticationMethod.NONE
-                .clientSecret("{noop}react-secret")
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri("http://localhost:3000/login/oauth2/code/react-client")
-                .scope(OidcScopes.OPENID)
-                .scope(OidcScopes.PROFILE)
-                .clientSettings(
-                    ClientSettings.builder()
-                        .requireAuthorizationConsent(true)
-                        .build()
-                )
-                .tokenSettings(
-                    TokenSettings.builder()
-                        .accessTokenTimeToLive(Duration.ofHours(1))
-                        .refreshTokenTimeToLive(Duration.ofDays(30))
-                        .reuseRefreshTokens(false)
-                        .build()
-                )
-                .build()
-            registeredClientRepository.save(reactClient)
+    @Value("\${app.bootstrap.enabled:true}")
+    private val enabled: Boolean,
+
+    @Value("\${app.bootstrap.admin.username:}")
+    private val adminUser: String,
+
+    @Value("\${app.bootstrap.admin.email:}")
+    private val adminEmail: String,
+
+    @Value("\${app.bootstrap.admin.password:}")
+    private val adminPass: String
+) : ApplicationRunner {
+
+    private val log = LoggerFactory.getLogger(javaClass)
+
+    @Transactional
+    override fun run(args: ApplicationArguments) {
+        if (!enabled) {
+            log.info("DataInitializer desabilitado (app.bootstrap.enabled=false).")
+            return
         }
 
-        // 2) Cliente para serviço back-to-back (Client Credentials)
-        if (registeredClientRepository.findByClientId("backend-service") == null) {
-            val backendClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("backend-service")
-                .clientSecret("{noop}backend-secret")
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
-                .scope("backend.read")
-                .clientSettings(ClientSettings.builder().build())
-                .tokenSettings(
-                    TokenSettings.builder()
-                        .accessTokenTimeToLive(Duration.ofHours(2))
-                        .build()
-                )
-                .build()
-            registeredClientRepository.save(backendClient)
+        // 1) Garantir roles padrão
+        ensureRole("ROLE_USER")
+        ensureRole("ROLE_ADMIN")
+
+        // 2) (Opcional) Criar admin de boot se propriedades estiverem preenchidas
+        if (adminUser.isNotBlank() && adminEmail.isNotBlank() && adminPass.isNotBlank()) {
+            ensureAdminUser(adminUser, adminEmail, adminPass)
         }
+    }
+
+    private fun ensureRole(name: String): Role {
+        return roleRepo.findByName(name).orElseGet {
+            log.info("Criando role: {}", name)
+            roleRepo.save(Role(name = name))
+        }
+    }
+
+    private fun ensureAdminUser(username: String, email: String, rawPass: String) {
+        val existing = userRepo.findByUsername(username).orElse(null)
+        if (existing != null) {
+            log.info("Admin '{}' já existe. Pulando criação.", username)
+            return
+        }
+        log.info("Criando usuário admin '{}'", username)
+        val u = userRepo.save(
+            User(
+                username = username,
+                email = email,
+                passwordHash = encoder.encode(rawPass),
+                enabled = true,
+                locked = false
+            )
+        )
+        val adminRole = roleRepo.findByName("ROLE_ADMIN").orElseThrow()
+        userRoleRepo.save(UserRole(user = u, role = adminRole))
     }
 }

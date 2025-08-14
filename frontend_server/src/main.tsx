@@ -4,7 +4,10 @@ import App from './App';
 import theme from './theme';
 import { CssBaseline } from "@mui/material";
 import './assets/Main.css';
-import { AuthProvider } from "./auth/AuthContext.tsx";
+import { AuthProvider } from "./auth/AuthProvider.tsx";
+import { tokenStore } from "./state/tokenStore.ts";
+
+tokenStore.init();
 
 const root = createRoot(document.getElementById('root')!);
 root.render(

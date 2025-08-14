@@ -7,8 +7,12 @@ import inac.fernando.aulas.projetos.authlogin.authserver.domain.repository.UserR
 import inac.fernando.aulas.projetos.authlogin.authserver.domain.repository.UserRoleRepository
 import inac.fernando.aulas.projetos.authlogin.authserver.dto.RegisterRequest
 import inac.fernando.aulas.projetos.authlogin.authserver.dto.UserResponse
+import jakarta.transaction.Transactional
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
+import org.springframework.web.server.ResponseStatusException
 
 @Service
 class UserService(
@@ -18,40 +22,45 @@ class UserService(
     private val passwordEncoder: PasswordEncoder
 ) {
 
-    fun register (request: RegisterRequest): UserResponse {
-        if (userRepo.existsByUsername(request.username)) {
-            throw IllegalArgumentException("Username already exists")
+    @Transactional
+    fun register(dto: RegisterRequest): UserResponse {
+        val username = dto.username.trim()
+        val email = dto.email.trim().lowercase()
+
+        if (userRepo.existsByUsername(username)) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Username already exists")
+        }
+        if (userRepo.existsByEmail(email)) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Email already exists")
         }
 
-        if (userRepo.existsByEmail(request.email)) {
-            throw IllegalArgumentException("Email already exists")
+        val user = User(
+            username = username,
+            email = email,
+            passwordHash = passwordEncoder.encode(dto.password),
+            enabled = true,
+            locked = false
+        )
+
+        try {
+            val newUser = userRepo.save(user)
+
+            val role = roleRepo.findByName("ROLE_USER")
+                .orElseThrow { IllegalStateException("ROLE_USER not found (seed not executed)") }
+
+            userRoleRepo.save(UserRole(user = newUser, role = role))
+
+            return newUser.toResponse(role)
+
+        } catch (ex: DataIntegrityViolationException) {
+            val msg = ex.message.orEmpty()
+            if (msg.contains("username", true)) {
+                throw ResponseStatusException(HttpStatus.CONFLICT, "Username already exists")
+            }
+            if (msg.contains("email", true)) {
+                throw ResponseStatusException(HttpStatus.CONFLICT, "Email already exists")
+            }
+            throw ResponseStatusException(HttpStatus.CONFLICT, "User already exists")
         }
-
-        val passwordHash = passwordEncoder.encode(request.password)
-
-        val newUser = userRepo.save(
-            User(
-                username = request.username,
-                email = request.email,
-                passwordHash = passwordHash
-            )
-        )
-
-        val userRole = userRoleRepo.save(
-            UserRole(
-                user = newUser,
-                role = roleRepo.findByName("ROLE_USER")
-                    .orElseThrow { IllegalStateException("Default role not found") }
-            )
-        )
-
-        // chamar backend para nome e telefone
-
-        return UserResponse(
-            id = newUser.id.toString(),
-            username = newUser.username,
-            email = newUser.email,
-            role = userRole.role.name
-        )
     }
 }

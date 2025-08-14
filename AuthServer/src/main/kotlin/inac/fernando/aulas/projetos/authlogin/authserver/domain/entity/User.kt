@@ -1,5 +1,6 @@
 package inac.fernando.aulas.projetos.authlogin.authserver.domain.entity
 
+import inac.fernando.aulas.projetos.authlogin.authserver.dto.UserResponse
 import jakarta.persistence.*
 import java.time.Instant
 import java.util.UUID
@@ -28,5 +29,15 @@ class User (
 
     @Column(name = "updated_at", insertable = false, updatable = true)
     var updatedAt: Instant = Instant.now()
-)
+) {
+
+    fun toResponse(role: Role): UserResponse {
+        return UserResponse(
+            id = id.toString(),
+            username = username,
+            email = email,
+            role = role.name
+        )
+    }
+}
 

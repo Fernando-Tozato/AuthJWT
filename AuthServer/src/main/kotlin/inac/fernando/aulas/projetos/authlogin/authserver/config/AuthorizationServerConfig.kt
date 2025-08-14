@@ -4,11 +4,13 @@ import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.jose.jwk.RSAKey
 import com.nimbusds.jose.jwk.source.JWKSource
 import com.nimbusds.jose.proc.SecurityContext
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.annotation.Order
 import org.springframework.security.config.Customizer
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
+import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.oauth2.core.AuthorizationGrantType
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod
 import org.springframework.security.oauth2.jwt.JwtDecoder
@@ -22,7 +24,7 @@ import org.springframework.security.oauth2.server.authorization.settings.ClientS
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint
-import java.security.KeyPair
+import org.springframework.web.cors.CorsConfigurationSource
 import java.security.KeyPairGenerator
 import java.security.interfaces.RSAPrivateKey
 import java.security.interfaces.RSAPublicKey
@@ -30,24 +32,24 @@ import java.time.Duration
 import java.util.*
 
 @Configuration
-class AuthorizationServerConfig {
+class AuthorizationServerConfig(
+    @Qualifier("appCorsConfigurationSource")
+    private val corsSource: CorsConfigurationSource
+) {
 
     @Bean
     @Order(1)
     fun authorizationServerSecurityFilterChain(http: HttpSecurity): SecurityFilterChain {
-        val authorizationServerConfigurer = OAuth2AuthorizationServerConfigurer()
-        val endpointsMatcher = authorizationServerConfigurer.endpointsMatcher
+        val authorizationServer = OAuth2AuthorizationServerConfigurer()
+        val endpoints = authorizationServer.endpointsMatcher
 
         http
-            .securityMatcher(endpointsMatcher)
+            .securityMatcher(endpoints)                    // só endpoints do AS
+            .cors { it.configurationSource(corsSource) }   // <— CORS AQUI
+            .csrf { it.ignoringRequestMatchers(endpoints) }
             .authorizeHttpRequests { it.anyRequest().authenticated() }
-            .csrf { it.ignoringRequestMatchers(endpointsMatcher) }
-            .exceptionHandling { ex -> ex.authenticationEntryPoint(LoginUrlAuthenticationEntryPoint("/login")) }
             .oauth2ResourceServer { it.jwt(Customizer.withDefaults()) }
-            .with(authorizationServerConfigurer) {
-                // Optional: enable OIDC if you plan to use it
-                // it.oidc(Customizer.withDefaults())
-            }
+            .with(authorizationServer) { /* OIDC opcional */ }
 
         return http.build()
     }
@@ -55,7 +57,7 @@ class AuthorizationServerConfig {
     @Bean
     fun authorizationServerSettings(): AuthorizationServerSettings =
         AuthorizationServerSettings.builder()
-            .issuer("http://localhost:8081")
+            .issuer("http://localhost:9000")
             .build()
 
     @Bean
@@ -70,7 +72,7 @@ class AuthorizationServerConfig {
     }
 
     @Bean
-    fun registeredClientRepository(passwordEncoder: org.springframework.security.crypto.password.PasswordEncoder): RegisteredClientRepository {
+    fun registeredClientRepository(passwordEncoder: PasswordEncoder): RegisteredClientRepository {
         val frontend = RegisteredClient.withId(UUID.randomUUID().toString())
             .clientId("react-frontend")
             .clientAuthenticationMethod(ClientAuthenticationMethod.NONE) // public client (PKCE)
