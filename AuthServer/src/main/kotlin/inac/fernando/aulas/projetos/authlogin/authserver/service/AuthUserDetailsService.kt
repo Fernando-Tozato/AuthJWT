@@ -2,12 +2,13 @@ package inac.fernando.aulas.projetos.authlogin.authserver.service
 
 import inac.fernando.aulas.projetos.authlogin.authserver.domain.repository.UserRepository
 import inac.fernando.aulas.projetos.authlogin.authserver.domain.repository.UserRoleRepository
-import org.springframework.transaction.annotation.Transactional
+import inac.fernando.aulas.projetos.authlogin.authserver.exception.NotFoundException
 import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.core.userdetails.User
 import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.security.core.userdetails.UserDetailsService
-import org.springframework.security.core.userdetails.UsernameNotFoundException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 
 @Service
 class AuthUserDetailsService(
@@ -17,13 +18,12 @@ class AuthUserDetailsService(
 
     @Transactional(readOnly = true)
     override fun loadUserByUsername(username: String): UserDetails {
-        val user = userRepo.findByUsername(username)
-            .orElseThrow { UsernameNotFoundException("User '$username' not found") }
+        val user = userRepo.findByUsername(username).orElseThrow { NotFoundException("user not found") }
 
         val roleNames = userRoleRepo.findRoleNamesByUserId(user.id)
         val authorities = roleNames.map { SimpleGrantedAuthority(it) }
 
-        return org.springframework.security.core.userdetails.User(
+        return User(
             user.username,
             user.passwordHash,
             user.enabled && !user.locked,

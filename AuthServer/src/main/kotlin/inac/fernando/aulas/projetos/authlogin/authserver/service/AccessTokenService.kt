@@ -2,6 +2,7 @@ package inac.fernando.aulas.projetos.authlogin.authserver.service
 
 import inac.fernando.aulas.projetos.authlogin.authserver.domain.repository.UserRepository
 import inac.fernando.aulas.projetos.authlogin.authserver.domain.repository.UserRoleRepository
+import inac.fernando.aulas.projetos.authlogin.authserver.exception.NotFoundException
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.oauth2.jwt.JwtClaimsSet
 import org.springframework.security.oauth2.jwt.JwtEncoder
@@ -18,8 +19,7 @@ class AccessTokenService(
     private val accessTtlMinutes: Long
 ) {
     fun issueForUsername(username: String): Pair<String, Instant> {
-        val user = userRepo.findByUsername(username)
-            .orElseThrow { IllegalArgumentException("User not found") }
+        val user = userRepo.findByUsername(username).orElseThrow { NotFoundException("user not found") }
 
         val roles: List<String> = userRoleRepo.findRoleNamesByUserId(user.id)
         val now = Instant.now()
@@ -29,9 +29,8 @@ class AccessTokenService(
             .issuer("http://localhost:9000")
             .issuedAt(now)
             .expiresAt(expiresAt)
-            .subject(user.id.toString())
-            .claim("preferred_username", user.username)
-            .claim("email", user.email)
+            .subject(user.username)
+            .claim("uid", user.id.toString())
             .claim("roles", roles)
             .build()
 

@@ -1,5 +1,6 @@
 package inac.fernando.aulas.projetos.authlogin.authserver.domain.entity
 
+import inac.fernando.aulas.projetos.authlogin.authserver.dto.admin.AdminUserResponse
 import inac.fernando.aulas.projetos.authlogin.authserver.dto.UserResponse
 import jakarta.persistence.*
 import java.time.Instant
@@ -28,7 +29,18 @@ class User (
     var createdAt: Instant = Instant.now(),
 
     @Column(name = "updated_at", insertable = false, updatable = true)
-    var updatedAt: Instant = Instant.now()
+    var updatedAt: Instant = Instant.now(),
+
+    @Column(name = "deleted_at")
+    var deletedAt: Instant? = null,
+
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+        name = "user_roles", schema = "auth",
+        joinColumns = [JoinColumn(name = "user_id")],
+        inverseJoinColumns = [JoinColumn(name = "role_id")]
+    )
+    var roles: MutableSet<Role> = mutableSetOf()
 ) {
 
     fun toResponse(role: Role): UserResponse {
@@ -37,6 +49,20 @@ class User (
             username = username,
             email = email,
             role = role.name
+        )
+    }
+
+    fun toAdminResponse(): AdminUserResponse {
+        return AdminUserResponse(
+            id = id.toString(),
+            username = username,
+            email = email,
+            enabled = enabled,
+            locked = locked,
+            createdAt = createdAt.toString(),
+            updatedAt = updatedAt.toString(),
+            deletedAt = deletedAt.toString(),
+            roles = roles.map { it.name }.sorted()
         )
     }
 }

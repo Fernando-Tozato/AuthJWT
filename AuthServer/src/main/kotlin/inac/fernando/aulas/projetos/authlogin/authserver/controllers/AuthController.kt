@@ -1,10 +1,6 @@
 package inac.fernando.aulas.projetos.authlogin.authserver.controllers
 
-import inac.fernando.aulas.projetos.authlogin.authserver.dto.LoginRequest
-import inac.fernando.aulas.projetos.authlogin.authserver.dto.RefreshRequest
-import inac.fernando.aulas.projetos.authlogin.authserver.dto.RegisterRequest
-import inac.fernando.aulas.projetos.authlogin.authserver.dto.TokenResponse
-import inac.fernando.aulas.projetos.authlogin.authserver.dto.UserResponse
+import inac.fernando.aulas.projetos.authlogin.authserver.dto.*
 import inac.fernando.aulas.projetos.authlogin.authserver.service.AccessTokenService
 import inac.fernando.aulas.projetos.authlogin.authserver.service.RefreshTokenService
 import inac.fernando.aulas.projetos.authlogin.authserver.service.UserService
@@ -12,13 +8,11 @@ import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.authentication.AuthenticationManager
-import org.springframework.security.authentication.BadCredentialsException
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
-import org.springframework.web.server.ResponseStatusException
 import java.time.Duration
 import java.time.Instant
 
@@ -39,29 +33,36 @@ class AuthController(
     }
 
     @PostMapping("/login")
-    fun login(@Valid @RequestBody req: LoginRequest): TokenResponse {
+    fun login(@Valid @RequestBody req: LoginRequest): ResponseEntity<TokenResponse> {
         val auth = UsernamePasswordAuthenticationToken(req.username.trim(), req.password)
-        try {
-            authenticationManager.authenticate(auth)
-        } catch (ex: BadCredentialsException) {
-            throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials")
-        }
+
+        authenticationManager.authenticate(auth)
 
         val (access, exp) = accessTokens.issueForUsername(req.username.trim())
         val refresh = refreshTokens.issueForUsername(req.username.trim())
 
         val expiresIn = Duration.between(Instant.now(), exp).seconds
-        return TokenResponse(accessToken = access, expiresIn = expiresIn, refreshToken = refresh)
+
+        val res = TokenResponse(
+            accessToken = access,
+            expiresIn = expiresIn,
+            refreshToken = refresh
+        )
+        return ResponseEntity.ok(res)
     }
 
     @PostMapping("/refresh")
-    fun refresh(@Valid @RequestBody req: RefreshRequest): TokenResponse {
+    fun refresh(@Valid @RequestBody req: RefreshRequest): ResponseEntity<TokenResponse> {
         val (username, newRefresh) = refreshTokens.rotate(req.refreshToken)
         val (access, exp) = accessTokens.issueForUsername(username)
-        return TokenResponse(
+
+        val expiresIn = Duration.between(Instant.now(), exp).seconds
+
+        val res = TokenResponse(
             accessToken = access,
-            expiresIn = Duration.between(Instant.now(), exp).seconds,
+            expiresIn = expiresIn,
             refreshToken = newRefresh
         )
+        return ResponseEntity.ok(res)
     }
 }

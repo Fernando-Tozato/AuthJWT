@@ -36,6 +36,7 @@ dependencies {
     testImplementation("org.springframework.security:spring-security-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     implementation(kotlin("test"))
+    implementation("org.springframework.boot:spring-boot-starter-webflux")
 }
 
 kotlin {

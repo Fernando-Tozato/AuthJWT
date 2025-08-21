@@ -29,8 +29,9 @@ class SecurityConfig(
             .csrf { it.disable() } // API stateless
             .cors { it.configurationSource(corsSource) }
             .authorizeHttpRequests {
-                it.requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
-                it.requestMatchers("/api/admin/**").hasRole("ADMIN")  // exige ROLE_ADMIN
+                it.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                it.requestMatchers("/internal/**").hasAnyRole("SYSTEM", "ADMIN")
+                it.requestMatchers("/api/admin/**").hasRole("ADMIN")
                 it.anyRequest().authenticated()
             }
             .oauth2ResourceServer { rs ->

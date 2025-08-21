@@ -3,9 +3,11 @@ package inac.fernando.aulas.projetos.authlogin.authserver.service
 import inac.fernando.aulas.projetos.authlogin.authserver.domain.entity.RefreshToken
 import inac.fernando.aulas.projetos.authlogin.authserver.domain.repository.RefreshTokenRepository
 import inac.fernando.aulas.projetos.authlogin.authserver.domain.repository.UserRepository
+import inac.fernando.aulas.projetos.authlogin.authserver.exception.NotFoundException
 import jakarta.transaction.Transactional
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
+import org.springframework.security.authentication.BadCredentialsException
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
 import java.nio.charset.StandardCharsets
@@ -23,7 +25,7 @@ class RefreshTokenService(
     @Value("\${app.token.refresh-ttl-days:7}") private val refreshTtlDays: Long
 ) {
     fun issueForUsername(username: String): String {
-        val user = userRepo.findByUsername(username).orElseThrow()
+        val user = userRepo.findByUsername(username).orElseThrow { NotFoundException("user not found") }
         val raw = generateRawToken()
         val hash = sha256(raw)
         val expiresAt = Instant.now().plus(refreshTtlDays, ChronoUnit.DAYS)
@@ -38,20 +40,21 @@ class RefreshTokenService(
                 createdAt = Instant.now()
             )
         )
-        return raw // devolvemos o "raw" para o cliente
+        return raw
     }
 
     @Transactional
     fun rotate(rawProvided: String): Pair<String /*username*/, String /*newRaw*/> {
         val hash = sha256(rawProvided)
         val existing = refreshRepo.findByTokenHashAndRevokedFalse(hash)
-            ?: throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid refresh token")
+            ?: throw BadCredentialsException("Invalid or revoked refresh token")
 
         if (existing.expiresAt.isBefore(Instant.now())) {
             existing.revoked = true; refreshRepo.save(existing)
-            throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Expired refresh token")
+            throw BadCredentialsException("Expired refresh token")
         }
-        existing.revoked = true; refreshRepo.save(existing)
+        existing.revoked = true
+        refreshRepo.save(existing)
 
         val user = existing.user
         val newRaw = generateRawToken()

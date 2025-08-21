@@ -9,4 +9,6 @@ interface RoleRepository : JpaRepository<Role, Long> {
     fun findByName(name: String): Optional<Role>
 
     fun existsByName(name: String): Boolean
+
+    fun findAllByNameIn(names: Collection<String>): List<Role>
 }
